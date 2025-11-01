@@ -1,16 +1,20 @@
 {
-  "name": "chat-app",
+  "name": "social-chat-app",
   "version": "1.0.0",
+  "description": "Simple social chat app with login, signup, and channels. Uses Turso cloud SQLite for persistent data.",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^8.3.0",
-    "bcrypt": "^5.1.0",
+    "@libsql/client": "^0.7.0",
+    "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.0",
-    "uuid": "^9.0.0"
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
