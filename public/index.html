@@ -9,31 +9,33 @@
       box-sizing: border-box;
       font-family: Arial, sans-serif;
     }
-
     body {
       background-color: #121212;
       color: #f1f1f1;
+      margin: 0;
+      height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      margin: 0;
     }
-
-    .container {
-      background-color: #1e1e1e;
-      padding: 40px;
+    .auth-container, .chat-container {
+      background: #1e1e1e;
+      padding: 30px;
       border-radius: 12px;
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
-      width: 350px;
+      width: 400px;
       text-align: center;
     }
-
-    h2 {
-      margin-bottom: 20px;
+    .chat-container {
+      width: 90%;
+      max-width: 800px;
+      height: 80vh;
+      display: none;
+      flex-direction: column;
+    }
+    h2, h3 {
       color: #00ff90;
     }
-
     input {
       width: 100%;
       padding: 10px;
@@ -44,7 +46,6 @@
       color: #fff;
       font-size: 16px;
     }
-
     button {
       width: 100%;
       padding: 12px;
@@ -57,31 +58,56 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-
     button:hover {
       background: #00cc70;
     }
-
     .toggle {
       margin-top: 12px;
       color: #ccc;
       cursor: pointer;
       font-size: 14px;
     }
-
     .toggle:hover {
       color: #00ff90;
     }
-
     #status {
-      margin-top: 15px;
+      margin-top: 10px;
       font-size: 14px;
       min-height: 20px;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      text-align: left;
+      margin: 10px 0;
+      padding-right: 5px;
+      background: #2c2c2c;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .message {
+      margin: 6px 0;
+      padding: 6px;
+      border-radius: 6px;
+      background: #333;
+    }
+    .message strong {
+      color: #00ff90;
+    }
+    .message-form {
+      display: flex;
+      gap: 10px;
+    }
+    .message-form input {
+      flex: 1;
+      background: #2c2c2c;
+      color: #fff;
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <!-- LOGIN/SIGNUP UI -->
+  <div class="auth-container" id="authContainer">
     <h2 id="formTitle">Sign Up</h2>
     <input id="username" placeholder="Username" />
     <input id="password" type="password" placeholder="Password" />
@@ -90,7 +116,16 @@
     <div id="status"></div>
   </div>
 
-  <!-- ✅ script placed at the end to avoid null errors -->
+  <!-- CHAT UI -->
+  <div class="chat-container" id="chatContainer">
+    <h3 id="currentChannel"># welcome</h3>
+    <div class="messages" id="messages"></div>
+    <div class="message-form">
+      <input id="messageInput" placeholder="Type a message..." />
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
