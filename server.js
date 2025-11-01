@@ -5,7 +5,6 @@ import jwt from "jsonwebtoken";
 import fs from "fs";
 import { createClient } from "@libsql/client";
 import sqlite3 from "sqlite3";
-import { open } from "sqlite";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,10 +32,10 @@ async function initDatabase() {
     console.error("⚠️ Turso connection failed:", err.message);
     console.log("🗄️ Falling back to local SQLite database...");
 
-    db = await open({
-      filename: "./fallback.sqlite",
-      driver: sqlite3.Database,
-    });
+  db = new sqlite3.Database("./fallback.sqlite", (err) => {
+    if (err) console.error("❌ Failed to open local SQLite:", err.message);
+  });
+
 
     // create tables if not exist
     await db.exec(`
