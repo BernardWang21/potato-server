@@ -1,7 +1,6 @@
 {
-  "name": "simple-social-chat",
+  "name": "chat-app",
   "version": "1.0.0",
-  "description": "A minimal Discord-like chat app with SQLite persistence.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
