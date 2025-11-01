@@ -1,142 +1,168 @@
-const express = require("express");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const cookieParser = require("cookie-parser");
-const Database = require("better-sqlite3");
-const { v4: uuid } = require("uuid");
-const path = require("path");
+// server.js
+import express from "express";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
+import { createClient } from "@libsql/client"; // Turso client
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
-const db = new Database("data.sqlite");
 const PORT = process.env.PORT || 3000;
-const SECRET = "supersecret"; // change in production
-const ADMIN = "very-fried-potato";
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 
+// --- Setup Turso Cloud SQLite connection ---
+// 1️⃣ Sign up free at https://turso.tech
+// 2️⃣ Create a DB and get connection URL + auth token
+// 3️⃣ Add them to your Render environment vars
+const db = createClient({
+  url: process.env.TURSO_URL,
+  authToken: process.env.TURSO_TOKEN,
+});
+
+// --- Express setup ---
 app.use(express.json());
 app.use(cookieParser());
+
+// Static frontend
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.use(express.static(path.join(__dirname, "public")));
 
-// --- DB Setup ---
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  username TEXT UNIQUE,
-  hash TEXT
-);
-CREATE TABLE IF NOT EXISTS channels (
-  id TEXT PRIMARY KEY,
-  name TEXT
-);
-CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY,
-  channel TEXT,
-  user TEXT,
-  content TEXT,
-  created INTEGER
-);
-`);
-const defaultChannels = ["welcome", "announcements", "chatting"];
-const exists = db.prepare("SELECT 1 FROM channels WHERE name=?").get(defaultChannels[0]);
-if (!exists) {
-  const insert = db.prepare("INSERT INTO channels VALUES (?, ?)");
-  for (const name of defaultChannels) insert.run(uuid(), name);
-}
+// --- Database initialization ---
+async function initDB() {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE,
+      password TEXT
+    );
+  `);
 
-// --- Middleware ---
-function auth(req, res, next) {
-  const token = req.cookies?.token;
-  if (token) {
-    try {
-      req.user = jwt.verify(token, SECRET);
-    } catch {
-      req.user = null;
-    }
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE
+    );
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT,
+      channel TEXT,
+      text TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Default channels
+  const channels = ["welcome", "announcements", "chat"];
+  for (const c of channels) {
+    await db.execute("INSERT OR IGNORE INTO channels (name) VALUES (?)", [c]);
   }
-  next();
 }
-app.use(auth);
+initDB();
 
-// --- Auth Routes ---
+// --- Helper: Verify JWT ---
+function verifyToken(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(403).json({ error: "Invalid token" });
+  }
+}
+
+// --- Routes ---
+
+// 🧩 Sign up
 app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "missing fields" });
+  if (!username || !password)
+    return res.json({ error: "Username and password required" });
+
   try {
     const hash = await bcrypt.hash(password, 10);
-    db.prepare("INSERT INTO users VALUES (?,?,?)").run(uuid(), username, hash);
-    const token = jwt.sign({ username }, SECRET);
-    res.cookie("token", token, { httpOnly: true });
-    res.json({ username });
+    await db.execute("INSERT INTO users (username, password) VALUES (?, ?)", [
+      username,
+      hash,
+    ]);
+    res.json({ success: true });
   } catch {
-    res.status(400).json({ error: "username taken" });
+    res.json({ error: "Username already exists" });
   }
 });
 
+// 🔐 Log in
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
-  if (!user) return res.status(401).json({ error: "invalid credentials" });
-  const ok = await bcrypt.compare(password, user.hash);
-  if (!ok) return res.status(401).json({ error: "invalid credentials" });
-  const token = jwt.sign({ username }, SECRET);
-  res.cookie("token", token, { httpOnly: true });
-  res.json({ username });
+  const result = await db.execute("SELECT * FROM users WHERE username = ?", [
+    username,
+  ]);
+  const user = result.rows[0];
+  if (!user) return res.json({ error: "User not found" });
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.json({ error: "Invalid password" });
+
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
+  res.json({ token });
 });
 
-app.post("/logout", (req, res) => {
-  res.clearCookie("token");
-  res.json({ ok: true });
-});
-
-// --- API Routes ---
-app.get("/channels", (req, res) => {
-  res.json(db.prepare("SELECT * FROM channels").all());
-});
-
-app.post("/channels", (req, res) => {
-  if (req.user?.username !== ADMIN) return res.status(403).end();
-  const { name } = req.body;
-  const id = uuid();
-  db.prepare("INSERT INTO channels VALUES (?,?)").run(id, name);
-  res.json({ id, name });
-});
-
-app.delete("/channels/:id", (req, res) => {
-  if (req.user?.username !== ADMIN) return res.status(403).end();
-  db.prepare("DELETE FROM channels WHERE id=?").run(req.params.id);
-  db.prepare("DELETE FROM messages WHERE channel=?").run(req.params.id);
-  res.json({ ok: true });
-});
-
-app.get("/messages", (req, res) => {
-  const channel = req.query.channel;
-  const msgs = db
-    .prepare("SELECT * FROM messages WHERE channel=? ORDER BY created ASC")
-    .all(channel);
-  res.json(msgs);
-});
-
-app.post("/messages", (req, res) => {
-  if (!req.user) return res.status(401).end();
-  const { channel, content } = req.body;
-  db.prepare("INSERT INTO messages VALUES (?,?,?,?,?)").run(
-    uuid(),
-    channel,
-    req.user.username,
-    content,
-    Date.now()
+// 💬 Get all messages
+app.get("/messages", verifyToken, async (req, res) => {
+  const msgs = await db.execute(
+    "SELECT username, channel, text, created_at FROM messages ORDER BY id ASC"
   );
-  res.json({ ok: true });
+  res.json(msgs.rows);
 });
 
-app.get("/members", (req, res) => {
-  res.json(db.prepare("SELECT username FROM users").all());
+// ✉️ Post a new message
+app.post("/message", verifyToken, async (req, res) => {
+  const { text } = req.body;
+  const user = req.user.username;
+  await db.execute("INSERT INTO messages (username, channel, text) VALUES (?, ?, ?)", [
+    user,
+    "chat",
+    text,
+  ]);
+  res.json({ success: true });
 });
 
-app.delete("/members/:name", (req, res) => {
-  if (req.user?.username !== ADMIN) return res.status(403).end();
-  db.prepare("DELETE FROM users WHERE username=?").run(req.params.name);
-  db.prepare("DELETE FROM messages WHERE user=?").run(req.params.name);
-  res.json({ ok: true });
+// 📢 Get all channels
+app.get("/channels", verifyToken, async (req, res) => {
+  const result = await db.execute("SELECT * FROM channels");
+  res.json(result.rows);
 });
 
-app.listen(PORT, () => console.log(`✅ Chat running at http://localhost:${PORT}`));
+// 🧠 Add new channel (admin only)
+app.post("/channels/add", verifyToken, async (req, res) => {
+  if (req.user.username !== "very-fried-potato")
+    return res.status(403).json({ error: "Not allowed" });
+
+  const { name } = req.body;
+  if (!name) return res.json({ error: "Channel name required" });
+  await db.execute("INSERT OR IGNORE INTO channels (name) VALUES (?)", [name]);
+  res.json({ success: true });
+});
+
+// ❌ Remove channel (admin only)
+app.post("/channels/remove", verifyToken, async (req, res) => {
+  if (req.user.username !== "very-fried-potato")
+    return res.status(403).json({ error: "Not allowed" });
+
+  const { name } = req.body;
+  await db.execute("DELETE FROM channels WHERE name = ?", [name]);
+  res.json({ success: true });
+});
+
+// 🚪 Serve frontend
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// 🚀 Start server
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
