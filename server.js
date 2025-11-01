@@ -1,168 +1,171 @@
-// server.js
 import express from "express";
+import cookieParser from "cookie-parser";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import cookieParser from "cookie-parser";
-import { createClient } from "@libsql/client"; // Turso client
-import path from "path";
-import { fileURLToPath } from "url";
+import fs from "fs";
+import { createClient } from "@libsql/client";
+import Database from "better-sqlite3";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
-// --- Setup Turso Cloud SQLite connection ---
-// 1️⃣ Sign up free at https://turso.tech
-// 2️⃣ Create a DB and get connection URL + auth token
-// 3️⃣ Add them to your Render environment vars
-const db = createClient({
-  url: process.env.TURSO_URL,
-  authToken: process.env.TURSO_TOKEN,
-});
-
-// --- Express setup ---
 app.use(express.json());
+app.use(express.static("public"));
 app.use(cookieParser());
 
-// Static frontend
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, "public")));
+let db; // database instance
 
-// --- Database initialization ---
-async function initDB() {
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE,
-      password TEXT
-    );
-  `);
+// ⚙️ Connect to Turso, fallback to local SQLite if fails
+async function initDatabase() {
+  try {
+    console.log("🔗 Connecting to Turso...");
+    db = createClient({
+      url: process.env.TURSO_URL,
+      authToken: process.env.TURSO_TOKEN,
+    });
+    await db.execute("SELECT 1;");
+    console.log("✅ Connected to Turso cloud database!");
+  } catch (err) {
+    console.error("⚠️ Turso connection failed:", err.message);
+    console.log("🗄️ Falling back to local SQLite...");
 
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS channels (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE
-    );
-  `);
+    const dbPath = "./fallback.sqlite";
+    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, "");
+    db = new Database(dbPath);
 
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT,
-      channel TEXT,
-      text TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+    // Create tables if missing
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT
+      )
+    `).run();
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT
+      )
+    `).run();
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER,
+        username TEXT,
+        content TEXT,
+        created_at TEXT
+      )
+    `).run();
 
-  // Default channels
-  const channels = ["welcome", "announcements", "chat"];
-  for (const c of channels) {
-    await db.execute("INSERT OR IGNORE INTO channels (name) VALUES (?)", [c]);
+    console.log("✅ Local database ready.");
   }
 }
-initDB();
 
-// --- Helper: Verify JWT ---
-function verifyToken(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+await initDatabase();
+
+// 🔑 Middleware for authentication
+function auth(req, res, next) {
+  const token = req.cookies.token;
+  if (!token) return res.status(401).json({ message: "Not logged in" });
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
   } catch {
-    res.status(403).json({ error: "Invalid token" });
+    res.status(403).json({ message: "Invalid token" });
   }
 }
 
-// --- Routes ---
-
-// 🧩 Sign up
-app.post("/signup", async (req, res) => {
+// 🧍 Signup
+app.post("/api/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password)
-    return res.json({ error: "Username and password required" });
+  if (!username || !password) return res.status(400).json({ message: "Missing fields" });
 
+  const hashed = await bcrypt.hash(password, 10);
   try {
-    const hash = await bcrypt.hash(password, 10);
-    await db.execute("INSERT INTO users (username, password) VALUES (?, ?)", [
-      username,
-      hash,
-    ]);
-    res.json({ success: true });
+    if (db.execute) {
+      await db.execute({
+        sql: "INSERT INTO users (username, password) VALUES (?, ?)",
+        args: [username, hashed],
+      });
+    } else {
+      db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashed);
+    }
+    res.json({ message: "Signup successful" });
   } catch {
-    res.json({ error: "Username already exists" });
+    res.status(400).json({ message: "Username already exists" });
   }
 });
 
-// 🔐 Log in
-app.post("/login", async (req, res) => {
+// 🔐 Login
+app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
-  const result = await db.execute("SELECT * FROM users WHERE username = ?", [
-    username,
-  ]);
-  const user = result.rows[0];
-  if (!user) return res.json({ error: "User not found" });
+  if (!username || !password) return res.status(400).json({ message: "Missing fields" });
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.json({ error: "Invalid password" });
+  let user;
+  if (db.execute) {
+    const result = await db.execute({
+      sql: "SELECT * FROM users WHERE username = ?",
+      args: [username],
+    });
+    user = result.rows?.[0];
+  } else {
+    user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+  }
+
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
 
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
-  res.json({ token });
+  res.cookie("token", token, { httpOnly: true });
+  res.json({ message: "Login successful" });
 });
 
-// 💬 Get all messages
-app.get("/messages", verifyToken, async (req, res) => {
-  const msgs = await db.execute(
-    "SELECT username, channel, text, created_at FROM messages ORDER BY id ASC"
-  );
-  res.json(msgs.rows);
+// 💬 Get messages
+app.get("/api/messages/:channel", auth, async (req, res) => {
+  const channel = req.params.channel;
+
+  if (db.execute) {
+    const result = await db.execute({
+      sql: "SELECT * FROM messages WHERE channel_id = (SELECT id FROM channels WHERE name = ?) ORDER BY created_at ASC",
+      args: [channel],
+    });
+    res.json(result.rows || []);
+  } else {
+    const messages = db
+      .prepare(
+        "SELECT * FROM messages WHERE channel_id = (SELECT id FROM channels WHERE name = ?) ORDER BY created_at ASC"
+      )
+      .all(channel);
+    res.json(messages);
+  }
 });
 
-// ✉️ Post a new message
-app.post("/message", verifyToken, async (req, res) => {
-  const { text } = req.body;
-  const user = req.user.username;
-  await db.execute("INSERT INTO messages (username, channel, text) VALUES (?, ?, ?)", [
-    user,
-    "chat",
-    text,
-  ]);
-  res.json({ success: true });
+// 📨 Post message
+app.post("/api/messages/:channel", auth, async (req, res) => {
+  const { content } = req.body;
+  const channel = req.params.channel;
+
+  if (!content) return res.status(400).json({ message: "Empty message" });
+
+  const createdAt = new Date().toISOString();
+  const username = req.user.username;
+
+  if (db.execute) {
+    await db.execute({
+      sql: `
+        INSERT INTO messages (channel_id, username, content, created_at)
+        VALUES ((SELECT id FROM channels WHERE name = ?), ?, ?, ?)
+      `,
+      args: [channel, username, content, createdAt],
+    });
+  } else {
+    db.prepare(
+      "INSERT INTO messages (channel_id, username, content, created_at) VALUES ((SELECT id FROM channels WHERE name = ?), ?, ?, ?)"
+    ).run(channel, username, content, createdAt);
+  }
+
+  res.json({ message: "Sent!" });
 });
 
-// 📢 Get all channels
-app.get("/channels", verifyToken, async (req, res) => {
-  const result = await db.execute("SELECT * FROM channels");
-  res.json(result.rows);
-});
-
-// 🧠 Add new channel (admin only)
-app.post("/channels/add", verifyToken, async (req, res) => {
-  if (req.user.username !== "very-fried-potato")
-    return res.status(403).json({ error: "Not allowed" });
-
-  const { name } = req.body;
-  if (!name) return res.json({ error: "Channel name required" });
-  await db.execute("INSERT OR IGNORE INTO channels (name) VALUES (?)", [name]);
-  res.json({ success: true });
-});
-
-// ❌ Remove channel (admin only)
-app.post("/channels/remove", verifyToken, async (req, res) => {
-  if (req.user.username !== "very-fried-potato")
-    return res.status(403).json({ error: "Not allowed" });
-
-  const { name } = req.body;
-  await db.execute("DELETE FROM channels WHERE name = ?", [name]);
-  res.json({ success: true });
-});
-
-// 🚪 Serve frontend
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// 🚀 Start server
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
