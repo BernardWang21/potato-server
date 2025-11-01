@@ -1,84 +1,75 @@
-const API = window.location.origin;
-const chatEl = document.getElementById("chat");
-const authEl = document.getElementById("auth");
+let isLogin = false;
 
-const loginBtn = document.getElementById("login-btn");
-const signupBtn = document.getElementById("signup-btn");
-const logoutBtn = document.getElementById("logout-btn");
-const sendBtn = document.getElementById("send-btn");
+const formTitle = document.getElementById("formTitle");
+const submitBtn = document.getElementById("submitBtn");
+const toggleMode = document.getElementById("toggleMode");
+const status = document.getElementById("status");
 
-let token = localStorage.getItem("token");
-let username = localStorage.getItem("username");
+toggleMode.addEventListener("click", () => {
+  isLogin = !isLogin;
+  formTitle.textContent = isLogin ? "Log In" : "Sign Up";
+  submitBtn.textContent = isLogin ? "Log In" : "Sign Up";
+  toggleMode.textContent = isLogin
+    ? "Don't have an account? Sign up"
+    : "Already have an account? Log in";
+  status.textContent = "";
+});
 
-async function api(path, data) {
-  const res = await fetch(API + path, {
-    method: data ? "POST" : "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: "Bearer " + token } : {})
-    },
-    body: data ? JSON.stringify(data) : undefined
-  });
-  return res.json();
+// 🧠 Helper: POST JSON to backend
+async function postData(route, data) {
+  try {
+    const res = await fetch(route, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const text = await res.text(); // get raw text in case JSON parse fails
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      console.error("Server did not return JSON:", text);
+      throw new Error("Server error (not JSON)");
+    }
+
+    if (!res.ok) {
+      throw new Error(json.message || "Request failed");
+    }
+    return json;
+  } catch (err) {
+    throw err;
+  }
 }
 
-function showChat() {
-  authEl.style.display = "none";
-  chatEl.style.display = "flex";
-  loadMessages();
-}
+submitBtn.addEventListener("click", async () => {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
 
-function showAuth() {
-  authEl.style.display = "flex";
-  chatEl.style.display = "none";
-}
+  if (!username || !password) {
+    status.textContent = "Please fill out all fields.";
+    status.style.color = "red";
+    return;
+  }
 
-if (token && username) showChat();
-else showAuth();
+  // ✅ Make sure this includes /api/
+  const route = isLogin ? "/api/login" : "/api/signup";
+  console.log("Submitting to:", route);
 
-loginBtn.onclick = async () => {
-  const u = document.getElementById("login-username").value;
-  const p = document.getElementById("login-password").value;
-  const res = await api("/login", { username: u, password: p });
-  if (res.token) {
-    token = res.token;
-    username = u;
-    localStorage.setItem("token", token);
-    localStorage.setItem("username", username);
-    showChat();
-  } else alert(res.error || "Login failed");
-};
+  try {
+    const data = await postData(route, { username, password });
+    status.style.color = "#00ff90";
+    status.textContent = data.message || "Success!";
 
-signupBtn.onclick = async () => {
-  const u = document.getElementById("signup-username").value;
-  const p = document.getElementById("signup-password").value;
-  const res = await api("/signup", { username: u, password: p });
-  if (res.success) alert("Signup successful! You can now log in.");
-  else alert(res.error || "Signup failed");
-};
-
-logoutBtn.onclick = () => {
-  localStorage.clear();
-  token = null;
-  showAuth();
-};
-
-sendBtn.onclick = async () => {
-  const input = document.getElementById("message-input");
-  const text = input.value.trim();
-  if (!text) return;
-  await api("/message", { text });
-  input.value = "";
-  loadMessages();
-};
-
-async function loadMessages() {
-  const res = await api("/messages");
-  const msgEl = document.getElementById("messages");
-  msgEl.innerHTML = "";
-  res.forEach(m => {
-    const div = document.createElement("div");
-    div.textContent = `${m.username}: ${m.text}`;
-    msgEl.appendChild(div);
-  });
-}
+    // Redirect to chat page after successful login
+    if (isLogin) {
+      setTimeout(() => {
+        window.location.href = "/chat.html";
+      }, 1000);
+    }
+  } catch (err) {
+    console.error("Request error:", err);
+    status.style.color = "red";
+    status.textContent = err.message;
+  }
+});
