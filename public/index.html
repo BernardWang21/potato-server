@@ -1,54 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat App</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Chat App</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background-color: #121212;
+      color: #f1f1f1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background-color: #1e1e1e;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+      width: 350px;
+      text-align: center;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      color: #00ff90;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 6px;
+      background: #2c2c2c;
+      color: #fff;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #00ff90;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #00cc70;
+    }
+
+    .toggle {
+      margin-top: 12px;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .toggle:hover {
+      color: #00ff90;
+    }
+
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      min-height: 20px;
+    }
+  </style>
 </head>
 <body>
-  <div class="auth-container" id="auth">
-    <h1 class="app-title">Welcome to ChatApp</h1>
-
-    <div class="auth-forms">
-      <!-- Log In Form -->
-      <div class="auth-box">
-        <h2>Log In</h2>
-        <input type="text" id="login-username" placeholder="Username">
-        <input type="password" id="login-password" placeholder="Password">
-        <button id="login-btn">Log In</button>
-      </div>
-
-      <!-- Sign Up Form -->
-      <div class="auth-box">
-        <h2>Sign Up</h2>
-        <input type="text" id="signup-username" placeholder="Username">
-        <input type="password" id="signup-password" placeholder="Password">
-        <button id="signup-btn">Sign Up</button>
-      </div>
-    </div>
+  <div class="container">
+    <h2 id="formTitle">Sign Up</h2>
+    <input id="username" placeholder="Username" />
+    <input id="password" type="password" placeholder="Password" />
+    <button id="submitBtn">Sign Up</button>
+    <div class="toggle" id="toggleMode">Already have an account? Log in</div>
+    <div id="status"></div>
   </div>
 
-  <div class="chat-container" id="chat" style="display: none;">
-    <div class="chat-header">
-      <h1 id="server-name">Community Chat</h1>
-      <button id="logout-btn">Logout</button>
-    </div>
-
-    <div id="channels">
-      <h3>Channels</h3>
-      <ul id="channel-list"></ul>
-    </div>
-
-    <div id="chat-main">
-      <div id="messages"></div>
-      <div id="message-form">
-        <input type="text" id="message-input" placeholder="Type your message...">
-        <button id="send-btn">Send</button>
-      </div>
-    </div>
-  </div>
-
+  <!-- ✅ script placed at the end to avoid null errors -->
   <script src="script.js"></script>
 </body>
 </html>
