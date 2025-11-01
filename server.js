@@ -4,7 +4,8 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import fs from "fs";
 import { createClient } from "@libsql/client";
-import Database from "better-sqlite3";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,9 +15,9 @@ app.use(express.json());
 app.use(express.static("public"));
 app.use(cookieParser());
 
-let db; // database instance
+let db; // Can be Turso client or local SQLite
 
-// ⚙️ Connect to Turso, fallback to local SQLite if fails
+// 🧱 Initialize database (Turso + fallback)
 async function initDatabase() {
   try {
     console.log("🔗 Connecting to Turso...");
@@ -24,40 +25,40 @@ async function initDatabase() {
       url: process.env.TURSO_URL,
       authToken: process.env.TURSO_TOKEN,
     });
+
+    // test the connection
     await db.execute("SELECT 1;");
     console.log("✅ Connected to Turso cloud database!");
   } catch (err) {
     console.error("⚠️ Turso connection failed:", err.message);
-    console.log("🗄️ Falling back to local SQLite...");
+    console.log("🗄️ Falling back to local SQLite database...");
 
-    const dbPath = "./fallback.sqlite";
-    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, "");
-    db = new Database(dbPath);
+    db = await open({
+      filename: "./fallback.sqlite",
+      driver: sqlite3.Database,
+    });
 
-    // Create tables if missing
-    db.prepare(`
+    // create tables if not exist
+    await db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT
-      )
-    `).run();
-    db.prepare(`
+      );
+
       CREATE TABLE IF NOT EXISTS channels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT
-      )
-    `).run();
-    db.prepare(`
+      );
+
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         channel_id INTEGER,
         username TEXT,
         content TEXT,
         created_at TEXT
-      )
-    `).run();
-
-    console.log("✅ Local database ready.");
+      );
+    `);
+    console.log("✅ Local SQLite database ready.");
   }
 }
 
@@ -67,6 +68,7 @@ await initDatabase();
 function auth(req, res, next) {
   const token = req.cookies.token;
   if (!token) return res.status(401).json({ message: "Not logged in" });
+
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     next();
@@ -78,9 +80,11 @@ function auth(req, res, next) {
 // 🧍 Signup
 app.post("/api/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: "Missing fields" });
+  if (!username || !password)
+    return res.status(400).json({ message: "Missing fields" });
 
   const hashed = await bcrypt.hash(password, 10);
+
   try {
     if (db.execute) {
       await db.execute({
@@ -88,7 +92,10 @@ app.post("/api/signup", async (req, res) => {
         args: [username, hashed],
       });
     } else {
-      db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashed);
+      await db.run("INSERT INTO users (username, password) VALUES (?, ?)", [
+        username,
+        hashed,
+      ]);
     }
     res.json({ message: "Signup successful" });
   } catch {
@@ -99,9 +106,11 @@ app.post("/api/signup", async (req, res) => {
 // 🔐 Login
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: "Missing fields" });
+  if (!username || !password)
+    return res.status(400).json({ message: "Missing fields" });
 
   let user;
+
   if (db.execute) {
     const result = await db.execute({
       sql: "SELECT * FROM users WHERE username = ?",
@@ -109,7 +118,7 @@ app.post("/api/login", async (req, res) => {
     });
     user = result.rows?.[0];
   } else {
-    user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+    user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
   }
 
   if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -121,23 +130,34 @@ app.post("/api/login", async (req, res) => {
   res.json({ message: "Login successful" });
 });
 
-// 💬 Get messages
+// 💬 Get messages for a channel
 app.get("/api/messages/:channel", auth, async (req, res) => {
   const channel = req.params.channel;
 
-  if (db.execute) {
-    const result = await db.execute({
-      sql: "SELECT * FROM messages WHERE channel_id = (SELECT id FROM channels WHERE name = ?) ORDER BY created_at ASC",
-      args: [channel],
-    });
-    res.json(result.rows || []);
-  } else {
-    const messages = db
-      .prepare(
-        "SELECT * FROM messages WHERE channel_id = (SELECT id FROM channels WHERE name = ?) ORDER BY created_at ASC"
-      )
-      .all(channel);
-    res.json(messages);
+  try {
+    if (db.execute) {
+      const result = await db.execute({
+        sql: `
+          SELECT * FROM messages
+          WHERE channel_id = (SELECT id FROM channels WHERE name = ?)
+          ORDER BY created_at ASC
+        `,
+        args: [channel],
+      });
+      res.json(result.rows || []);
+    } else {
+      const messages = await db.all(
+        `
+        SELECT * FROM messages
+        WHERE channel_id = (SELECT id FROM channels WHERE name = ?)
+        ORDER BY created_at ASC
+      `,
+        [channel]
+      );
+      res.json(messages);
+    }
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load messages", error: err });
   }
 });
 
@@ -145,27 +165,40 @@ app.get("/api/messages/:channel", auth, async (req, res) => {
 app.post("/api/messages/:channel", auth, async (req, res) => {
   const { content } = req.body;
   const channel = req.params.channel;
+  const username = req.user.username;
+  const createdAt = new Date().toISOString();
 
   if (!content) return res.status(400).json({ message: "Empty message" });
 
-  const createdAt = new Date().toISOString();
-  const username = req.user.username;
-
-  if (db.execute) {
-    await db.execute({
-      sql: `
+  try {
+    if (db.execute) {
+      await db.execute({
+        sql: `
+          INSERT INTO messages (channel_id, username, content, created_at)
+          VALUES ((SELECT id FROM channels WHERE name = ?), ?, ?, ?)
+        `,
+        args: [channel, username, content, createdAt],
+      });
+    } else {
+      await db.run(
+        `
         INSERT INTO messages (channel_id, username, content, created_at)
         VALUES ((SELECT id FROM channels WHERE name = ?), ?, ?, ?)
       `,
-      args: [channel, username, content, createdAt],
-    });
-  } else {
-    db.prepare(
-      "INSERT INTO messages (channel_id, username, content, created_at) VALUES ((SELECT id FROM channels WHERE name = ?), ?, ?, ?)"
-    ).run(channel, username, content, createdAt);
-  }
+        [channel, username, content, createdAt]
+      );
+    }
 
-  res.json({ message: "Sent!" });
+    res.json({ message: "Sent!" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to send", error: err });
+  }
 });
 
+// 🏠 Root route
+app.get("/", (req, res) => {
+  res.sendFile("index.html", { root: "public" });
+});
+
+// 🚀 Start server
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
