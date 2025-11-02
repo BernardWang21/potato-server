@@ -3,111 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Social Chat App</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      font-family: Arial, sans-serif;
-    }
-    body {
-      background-color: #121212;
-      color: #f1f1f1;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .auth-container, .chat-container {
-      background: #1e1e1e;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
-      width: 400px;
-      text-align: center;
-    }
-    .chat-container {
-      width: 90%;
-      max-width: 800px;
-      height: 80vh;
-      display: none;
-      flex-direction: column;
-    }
-    h2, h3 {
-      color: #00ff90;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border: none;
-      border-radius: 6px;
-      background: #2c2c2c;
-      color: #fff;
-      font-size: 16px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 10px;
-      border: none;
-      border-radius: 6px;
-      background: #00ff90;
-      color: #000;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    button:hover {
-      background: #00cc70;
-    }
-    .toggle {
-      margin-top: 12px;
-      color: #ccc;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .toggle:hover {
-      color: #00ff90;
-    }
-    #status {
-      margin-top: 10px;
-      font-size: 14px;
-      min-height: 20px;
-    }
-    .messages {
-      flex: 1;
-      overflow-y: auto;
-      text-align: left;
-      margin: 10px 0;
-      padding-right: 5px;
-      background: #2c2c2c;
-      border-radius: 8px;
-      padding: 10px;
-    }
-    .message {
-      margin: 6px 0;
-      padding: 6px;
-      border-radius: 6px;
-      background: #333;
-    }
-    .message strong {
-      color: #00ff90;
-    }
-    .message-form {
-      display: flex;
-      gap: 10px;
-    }
-    .message-form input {
-      flex: 1;
-      background: #2c2c2c;
-      color: #fff;
-    }
-  </style>
+  <title>Social Chat</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- LOGIN/SIGNUP UI -->
-  <div class="auth-container" id="authContainer">
+  <div id="auth-container" class="center">
     <h2 id="formTitle">Sign Up</h2>
     <input id="username" placeholder="Username" />
     <input id="password" type="password" placeholder="Password" />
@@ -116,13 +16,19 @@
     <div id="status"></div>
   </div>
 
-  <!-- CHAT UI -->
-  <div class="chat-container" id="chatContainer">
-    <h3 id="currentChannel"># welcome</h3>
-    <div class="messages" id="messages"></div>
-    <div class="message-form">
-      <input id="messageInput" placeholder="Type a message..." />
-      <button id="sendBtn">Send</button>
+  <div id="chat-container" class="hidden">
+    <div id="sidebar">
+      <h3>Channels</h3>
+      <ul id="channelList"></ul>
+      <button id="addChannelBtn" class="admin-only hidden">+ Add Channel</button>
+    </div>
+    <div id="chat">
+      <div id="chatHeader">Welcome</div>
+      <div id="messages"></div>
+      <div id="messageInputContainer">
+        <input id="messageInput" placeholder="Type a message..." />
+        <button id="sendBtn">Send</button>
+      </div>
     </div>
   </div>
 
