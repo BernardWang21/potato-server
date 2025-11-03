@@ -1,111 +1,93 @@
-const authContainer = document.getElementById("auth-container");
-const chatContainer = document.getElementById("chat-container");
-const formTitle = document.getElementById("formTitle");
-const usernameInput = document.getElementById("username");
-const passwordInput = document.getElementById("password");
-const submitBtn = document.getElementById("submitBtn");
-const toggleMode = document.getElementById("toggleMode");
-const statusDiv = document.getElementById("status");
+const authScreen = document.getElementById("auth-screen");
+const chatApp = document.getElementById("chat-app");
+const authButton = document.getElementById("auth-button");
+const toggleAuth = document.getElementById("toggle-auth");
+const authTitle = document.getElementById("auth-title");
+const authError = document.getElementById("auth-error");
 
-let isLogin = false;
+let isSignup = false;
 let currentUser = null;
-let currentChannel = "welcome";
 
-async function postData(url, data) {
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error("Server error");
-    return await res.json();
-  } catch (err) {
-    console.error("Request error:", err);
-    throw err;
-  }
-}
+toggleAuth.onclick = () => {
+  isSignup = !isSignup;
+  authTitle.textContent = isSignup ? "Create your account" : "Welcome back";
+  authButton.textContent = isSignup ? "Sign Up" : "Log In";
+  toggleAuth.textContent = isSignup
+    ? "Already have an account? Log in"
+    : "Don't have an account? Sign up";
+  authError.textContent = "";
+};
 
-toggleMode.addEventListener("click", () => {
-  isLogin = !isLogin;
-  formTitle.textContent = isLogin ? "Log In" : "Sign Up";
-  submitBtn.textContent = isLogin ? "Log In" : "Sign Up";
-  toggleMode.textContent = isLogin
-    ? "Don't have an account? Sign up"
-    : "Already have an account? Log in";
-});
+authButton.onclick = async () => {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+  if (!username || !password) return (authError.textContent = "Enter all fields!");
 
-submitBtn.addEventListener("click", async () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value.trim();
-  if (!username || !password) {
-    statusDiv.textContent = "Please fill all fields.";
-    return;
-  }
-
-  const endpoint = isLogin ? "/api/login" : "/api/signup";
-  try {
-    const result = await postData(endpoint, { username, password });
-    console.log(result);
-    currentUser = username;
-    enterChat();
-  } catch {
-    statusDiv.textContent = "Error logging in or signing up.";
-  }
-});
-
-function enterChat() {
-  authContainer.classList.add("hidden");
-  chatContainer.classList.remove("hidden");
-
-  if (currentUser === "very-fried-potato") {
-    document.querySelector(".admin-only").classList.remove("hidden");
-  }
-
-  setupChannels();
-  loadMessages(currentChannel);
-}
-
-function setupChannels() {
-  const channels = ["welcome", "announcements", "chatting"];
-  const list = document.getElementById("channelList");
-  list.innerHTML = "";
-  channels.forEach((ch) => {
-    const li = document.createElement("li");
-    li.textContent = "#" + ch;
-    li.addEventListener("click", () => {
-      currentChannel = ch;
-      document.getElementById("chatHeader").textContent = "#" + ch;
-      loadMessages(ch);
-    });
-    list.appendChild(li);
+  const endpoint = isSignup ? "/api/signup" : "/api/login";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
   });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return (authError.textContent = data.message || "Error");
+
+  currentUser = username;
+  authScreen.classList.add("hidden");
+  chatApp.classList.remove("hidden");
+  document.getElementById("user-info").textContent = `Hello, ${username}`;
+  loadChannels();
+};
+
+document.getElementById("logout").onclick = () => {
+  fetch("/api/logout", { method: "POST" });
+  location.reload();
+};
+
+const channelsDiv = document.getElementById("channels");
+const messagesDiv = document.getElementById("messages");
+let activeChannel = null;
+
+async function loadChannels() {
+  const res = await fetch("/api/channels").catch(() => null);
+  const channels = res?.ok ? await res.json() : [
+    { name: "general" },
+    { name: "announcements" }
+  ];
+
+  channelsDiv.innerHTML = "";
+  channels.forEach(c => {
+    const btn = document.createElement("button");
+    btn.textContent = `# ${c.name}`;
+    btn.onclick = () => loadMessages(c.name);
+    channelsDiv.appendChild(btn);
+  });
+
+  if (channels.length) loadMessages(channels[0].name);
 }
 
 async function loadMessages(channel) {
+  activeChannel = channel;
   const res = await fetch(`/api/messages/${channel}`);
-  const messagesDiv = document.getElementById("messages");
+  const data = await res.json().catch(() => []);
   messagesDiv.innerHTML = "";
-
-  if (res.ok) {
-    const messages = await res.json();
-    messages.forEach((m) => {
-      const div = document.createElement("div");
-      div.classList.add("message");
-      div.innerHTML = `<span class="username">${m.username}</span>: ${m.content}`;
-      messagesDiv.appendChild(div);
-    });
-  } else {
-    messagesDiv.innerHTML = "<p>Failed to load messages.</p>";
-  }
+  data.forEach(msg => {
+    const div = document.createElement("div");
+    div.className = "message";
+    div.innerHTML = `<span class="user">${msg.username}</span>: ${msg.content}`;
+    messagesDiv.appendChild(div);
+  });
 }
 
-document.getElementById("sendBtn").addEventListener("click", async () => {
-  const input = document.getElementById("messageInput");
-  const content = input.value.trim();
+document.getElementById("send").onclick = async () => {
+  const content = document.getElementById("new-message").value.trim();
   if (!content) return;
-  input.value = "";
-
-  await postData(`/api/messages/${currentChannel}`, { content });
-  loadMessages(currentChannel);
-});
+  await fetch(`/api/messages/${activeChannel}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  document.getElementById("new-message").value = "";
+  loadMessages(activeChannel);
+};
