@@ -1,58 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Potato Server 🥔</title>
   <script defer src="script.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-
   <style>
-    /* Hide scrollbars globally */
-    * {
-      scrollbar-width: none;
-    }
-    *::-webkit-scrollbar {
-      display: none;
-    }
+    *::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
   </style>
 </head>
-<body class="h-screen flex flex-col bg-[#2B2D31] text-gray-200">
-  <!-- Header -->
-  <header class="flex items-center justify-between px-6 py-4 bg-[#1E1F22] border-b border-gray-700">
-    <h1 class="text-2xl font-bold text-orange-400">🥔 Potato Server</h1>
-    <button id="logoutBtn" class="bg-red-500 hover:bg-red-600 px-4 py-1 rounded text-white">Logout</button>
-  </header>
+<body class="h-screen flex bg-[#2B2D31] text-gray-200">
+  <!-- Channels Sidebar -->
+  <aside id="channels" class="w-72 bg-[#232428] border-r border-gray-700 p-4 flex flex-col">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold">Channels</h2>
+      <button id="addChannel" class="text-orange-500 hover:text-orange-400 text-lg font-bold">+</button>
+    </div>
+    <div id="channelList" class="flex-1 overflow-y-auto space-y-2"></div>
+  </aside>
 
-  <div class="flex flex-1 overflow-hidden">
-    <!-- Channels -->
-    <aside id="channels" class="w-72 bg-[#232428] border-r border-gray-700 p-4 overflow-y-auto">
-      <h2 class="text-lg font-semibold mb-3 text-gray-300">Channels</h2>
-      <div id="channelList" class="space-y-2"></div>
-      <button id="newChannelBtn" class="mt-4 w-full bg-orange-600 hover:bg-orange-700 py-2 rounded text-white text-sm">+ Add Channel</button>
-    </aside>
-
-    <!-- Chat -->
-    <main class="flex-1 flex flex-col bg-[#313338]">
-      <div id="chatHeader" class="border-b border-gray-700 px-6 py-3 text-lg font-semibold text-white"># Welcome</div>
-
-      <div id="messages" class="flex-1 overflow-y-auto px-6 py-4 space-y-3"></div>
-
-      <div class="border-t border-gray-700 p-4">
-        <input
-          id="messageInput"
-          type="text"
-          placeholder="Type your message..."
-          class="w-full bg-[#1E1F22] text-gray-100 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-orange-600"
-        />
+  <!-- Chat Area -->
+  <main class="flex-1 flex flex-col bg-[#313338]">
+    <header class="border-b border-gray-700 px-6 py-3 flex justify-between items-center">
+      <h2 id="chatTitle" class="text-lg font-semibold text-white"># welcome</h2>
+      <div class="flex items-center gap-3">
+        <span id="currentUser" class="font-medium"></span>
+        <button id="logoutBtn" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm">Logout</button>
       </div>
-    </main>
+    </header>
 
-    <!-- Members -->
-    <aside id="members" class="w-64 bg-[#232428] border-l border-gray-700 p-4 overflow-y-auto">
-      <h2 class="text-lg font-semibold mb-3 text-gray-300">Members</h2>
-      <div id="memberList" class="space-y-2"></div>
-    </aside>
-  </div>
+    <div id="messages" class="flex-1 overflow-y-auto px-6 py-4 space-y-3"></div>
+
+    <div id="lockedNotice" class="hidden border-t border-gray-700 text-center text-gray-400 py-3">
+      🔒 This channel is locked — only very-fried-potato can send messages.
+    </div>
+
+    <div id="messageInputBox" class="border-t border-gray-700 p-4">
+      <input
+        id="messageInput"
+        type="text"
+        placeholder="Type your message..."
+        class="w-full bg-[#1E1F22] text-gray-100 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-orange-600"
+      />
+    </div>
+  </main>
+
+  <!-- Members Sidebar -->
+  <aside id="members" class="w-64 bg-[#232428] border-l border-gray-700 p-4 flex flex-col">
+    <h2 class="text-lg font-bold mb-4">Members</h2>
+    <div id="memberList" class="flex-1 overflow-y-auto space-y-2"></div>
+  </aside>
 </body>
 </html>
