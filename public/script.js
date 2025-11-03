@@ -4,7 +4,7 @@ let users = JSON.parse(localStorage.getItem("users")) || [
 ];
 let channels = JSON.parse(localStorage.getItem("channels")) || [
   { id: 1, name: "welcome", locked: true, messages: [
-    { author: "very-fried-potato", text: "Welcome to Potato Server! 🥔" }
+    { author: "very-fried-potato", text: "Welcome to Potato Server! 🥔", time: new Date().toISOString() }
   ]},
   { id: 2, name: "general", locked: false, messages: [] }
 ];
@@ -125,14 +125,36 @@ function renderMessages() {
   chatTitle.textContent = `# ${ch.name}`;
   messagesDiv.innerHTML = "";
 
-  ch.messages.forEach((msg) => {
+  ch.messages.forEach((msg, i) => {
     const div = document.createElement("div");
-    div.className = "px-2 py-1";
-    div.innerHTML = `
+    div.className = "group px-2 py-1 flex justify-between items-center hover:bg-[#3A3C40] rounded";
+
+    const left = document.createElement("div");
+    left.innerHTML = `
       <span class="font-semibold text-orange-400">${msg.author}</span>
-      <span class="text-gray-400 text-xs ml-2">${new Date().toLocaleTimeString()}</span>
-      <div class="text-gray-100">${msg.text}</div>
+      <span class="text-gray-400 text-xs ml-2">${new Date(msg.time).toLocaleTimeString()}</span>
+      <div class="text-gray-100 break-words max-w-[90%]">${msg.text}</div>
     `;
+
+    const right = document.createElement("div");
+    right.className = "opacity-0 group-hover:opacity-100 transition";
+    
+    // 🗑 Delete message button
+    if (currentUser.isAdmin || msg.author === currentUser.username) {
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑️";
+      delBtn.className = "text-red-400 hover:text-red-300 text-sm ml-2";
+      delBtn.onclick = () => {
+        if (confirm("Delete this message?")) {
+          ch.messages.splice(i, 1);
+          saveData();
+          renderMessages();
+        }
+      };
+      right.appendChild(delBtn);
+    }
+
+    div.append(left, right);
     messagesDiv.appendChild(div);
   });
 
@@ -154,7 +176,7 @@ function renderMembers() {
     const div = document.createElement("div");
     div.className = "flex justify-between items-center bg-[#2B2D31] px-3 py-2 rounded";
     const name = document.createElement("span");
-    name.textContent = u.username + (u.isAdmin ? " 👑" : "");
+    name.textContent = u.username + (u.isAdmin ? " [Admin]" : "");
 
     if (currentUser.isAdmin && u.username !== "very-fried-potato") {
       const controls = document.createElement("div");
@@ -164,7 +186,7 @@ function renderMembers() {
       rename.onclick = () => {
         const newName = prompt("Rename member:", u.username);
         if (!newName) return;
-        // Update username in posts
+        // Update username in messages
         channels.forEach(c =>
           c.messages.forEach(m => {
             if (m.author === u.username) m.author = newName;
@@ -207,7 +229,12 @@ function sendMessage() {
     return;
   }
 
-  ch.messages.push({ author: currentUser.username, text });
+  ch.messages.push({
+    author: currentUser.username,
+    text,
+    time: new Date().toISOString()
+  });
+
   messageInput.value = "";
   saveData();
   renderMessages();
