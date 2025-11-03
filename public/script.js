@@ -4,7 +4,7 @@ let users = JSON.parse(localStorage.getItem("users")) || [
 ];
 let channels = JSON.parse(localStorage.getItem("channels")) || [
   { id: 1, name: "welcome", locked: true, messages: [
-    { author: "very-fried-potato", text: "Welcome to Potato Server! 🥔", time: new Date().toISOString() }
+    { author: "very-fried-potato", text: "Welcome to existence!", time: new Date().toISOString() }
   ]},
   { id: 2, name: "general", locked: false, messages: [] }
 ];
