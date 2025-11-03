@@ -1,97 +1,218 @@
-// Simple Discord-style frontend (localStorage based)
-
-let currentUser = localStorage.getItem("username") || "very-fried-potato";
+// === Persistent Local Data ===
+let users = JSON.parse(localStorage.getItem("users")) || [
+  { username: "very-fried-potato", password: "601121W@ngheh", isAdmin: true }
+];
 let channels = JSON.parse(localStorage.getItem("channels")) || [
-  { id: 1, name: "welcome", messages: [{ author: "very-fried-potato", text: "Welcome to Potato Server! 🥔" }] },
-  { id: 2, name: "general", messages: [] },
-  { id: 3, name: "random", messages: [] }
+  { id: 1, name: "welcome", locked: true, messages: [
+    { author: "very-fried-potato", text: "Welcome to Potato Server! 🥔" }
+  ]},
+  { id: 2, name: "general", locked: false, messages: [] }
 ];
 let activeChannel = 1;
+let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
 
-const messageInput = document.getElementById("messageInput");
-const messagesDiv = document.getElementById("messages");
-const channelList = document.getElementById("channelList");
-const memberList = document.getElementById("memberList");
-const chatHeader = document.getElementById("chatHeader");
-
-// Simulate online members
-const members = ["very-fried-potato", "you", "potato-friend", "mashed-tuber"];
-
-// Save channels
-function saveChannels() {
+function saveData() {
+  localStorage.setItem("users", JSON.stringify(users));
   localStorage.setItem("channels", JSON.stringify(channels));
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
 }
 
-// Render Channels
+// === DOM Elements ===
+const channelList = document.getElementById("channelList");
+const memberList = document.getElementById("memberList");
+const chatTitle = document.getElementById("chatTitle");
+const messagesDiv = document.getElementById("messages");
+const messageInput = document.getElementById("messageInput");
+const messageInputBox = document.getElementById("messageInputBox");
+const lockedNotice = document.getElementById("lockedNotice");
+const addChannelBtn = document.getElementById("addChannel");
+const currentUserEl = document.getElementById("currentUser");
+const logoutBtn = document.getElementById("logoutBtn");
+
+// === Authentication ===
+if (!currentUser) {
+  const username = prompt("Enter username:");
+  const password = prompt("Enter password:");
+
+  let user = users.find(u => u.username === username && u.password === password);
+  if (!user) {
+    const create = confirm("User not found. Create account?");
+    if (create) {
+      user = { username, password, isAdmin: username === "very-fried-potato" };
+      users.push(user);
+      alert("Account created!");
+    } else {
+      alert("Goodbye.");
+      throw new Error("No user logged in");
+    }
+  }
+  currentUser = user;
+  saveData();
+}
+
+currentUserEl.textContent = currentUser.username + (currentUser.isAdmin ? " (Admin)" : "");
+
+// === Render Channels ===
 function renderChannels() {
   channelList.innerHTML = "";
   channels.forEach((ch) => {
-    const btn = document.createElement("button");
-    btn.textContent = `# ${ch.name}`;
-    btn.className =
-      "w-full text-left px-3 py-2 rounded hover:bg-[#3A3C40] transition " +
-      (ch.id === activeChannel ? "bg-[#404249] text-orange-400 font-semibold" : "text-gray-300");
-    btn.onclick = () => {
+    const div = document.createElement("div");
+    div.className = `flex items-center justify-between px-3 py-2 rounded hover:bg-[#3A3C40] cursor-pointer ${
+      activeChannel === ch.id ? "bg-[#404249] text-orange-400" : "text-gray-300"
+    }`;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = `# ${ch.name}`;
+    nameSpan.onclick = () => {
       activeChannel = ch.id;
       renderMessages();
       renderChannels();
-      chatHeader.textContent = `# ${ch.name}`;
     };
-    channelList.appendChild(btn);
+
+    div.appendChild(nameSpan);
+
+    if (currentUser.isAdmin) {
+      const tools = document.createElement("div");
+      tools.className = "flex gap-2 text-sm";
+      const lockBtn = document.createElement("button");
+      lockBtn.textContent = ch.locked ? "🔒" : "🔓";
+      lockBtn.onclick = (e) => {
+        e.stopPropagation();
+        ch.locked = !ch.locked;
+        saveData();
+        renderChannels();
+        renderMessages();
+      };
+
+      const renameBtn = document.createElement("button");
+      renameBtn.textContent = "✏️";
+      renameBtn.onclick = (e) => {
+        e.stopPropagation();
+        const newName = prompt("Rename channel:", ch.name);
+        if (newName) {
+          ch.name = newName;
+          saveData();
+          renderChannels();
+        }
+      };
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete channel #${ch.name}?`)) {
+          channels = channels.filter(c => c.id !== ch.id);
+          if (activeChannel === ch.id) activeChannel = channels[0]?.id || null;
+          saveData();
+          renderChannels();
+          renderMessages();
+        }
+      };
+
+      tools.append(lockBtn, renameBtn, deleteBtn);
+      div.appendChild(tools);
+    }
+
+    channelList.appendChild(div);
   });
 }
 
-// Render Messages
+// === Render Messages ===
 function renderMessages() {
-  messagesDiv.innerHTML = "";
-  const ch = channels.find((c) => c.id === activeChannel);
+  const ch = channels.find(c => c.id === activeChannel);
   if (!ch) return;
-  if (ch.messages.length === 0) {
-    messagesDiv.innerHTML = `<p class="text-gray-500 text-center mt-8">No messages yet...</p>`;
-    return;
-  }
+
+  chatTitle.textContent = `# ${ch.name}`;
+  messagesDiv.innerHTML = "";
 
   ch.messages.forEach((msg) => {
     const div = document.createElement("div");
-    div.className = "flex flex-col";
+    div.className = "px-2 py-1";
     div.innerHTML = `
-      <div class="text-sm">
-        <span class="font-semibold text-orange-400">${msg.author}</span>
-        <span class="text-gray-400 text-xs ml-2">${new Date().toLocaleTimeString()}</span>
-      </div>
-      <div class="text-gray-200">${msg.text}</div>
+      <span class="font-semibold text-orange-400">${msg.author}</span>
+      <span class="text-gray-400 text-xs ml-2">${new Date().toLocaleTimeString()}</span>
+      <div class="text-gray-100">${msg.text}</div>
     `;
     messagesDiv.appendChild(div);
   });
+
+  // Lock visibility
+  if (ch.locked && !currentUser.isAdmin) {
+    messageInputBox.classList.add("hidden");
+    lockedNotice.classList.remove("hidden");
+  } else {
+    messageInputBox.classList.remove("hidden");
+    lockedNotice.classList.add("hidden");
+  }
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// Render Members
+// === Render Members ===
 function renderMembers() {
   memberList.innerHTML = "";
-  members.forEach((m) => {
+  users.forEach((u) => {
     const div = document.createElement("div");
-    div.className =
-      "flex items-center justify-between bg-[#2B2D31] px-3 py-2 rounded text-gray-300";
-    div.textContent = m;
+    div.className = "flex justify-between items-center bg-[#2B2D31] px-3 py-2 rounded";
+    const name = document.createElement("span");
+    name.textContent = u.username + (u.isAdmin ? " 👑" : "");
+
+    if (currentUser.isAdmin && u.username !== "very-fried-potato") {
+      const controls = document.createElement("div");
+      controls.className = "flex gap-2";
+      const rename = document.createElement("button");
+      rename.textContent = "✏️";
+      rename.onclick = () => {
+        const newName = prompt("Rename member:", u.username);
+        if (!newName) return;
+        // Update username in posts
+        channels.forEach(c =>
+          c.messages.forEach(m => {
+            if (m.author === u.username) m.author = newName;
+          })
+        );
+        u.username = newName;
+        saveData();
+        renderMembers();
+        renderMessages();
+      };
+
+      const remove = document.createElement("button");
+      remove.textContent = "🗑️";
+      remove.onclick = () => {
+        if (confirm(`Remove ${u.username}?`)) {
+          users = users.filter(x => x.username !== u.username);
+          saveData();
+          renderMembers();
+        }
+      };
+      controls.append(rename, remove);
+      div.appendChild(controls);
+    }
+
+    div.appendChild(name);
     memberList.appendChild(div);
   });
 }
 
-// Send message
+// === Send Message ===
 function sendMessage() {
   const text = messageInput.value.trim();
   if (!text) return;
-  const ch = channels.find((c) => c.id === activeChannel);
+
+  const ch = channels.find(c => c.id === activeChannel);
   if (!ch) return;
 
-  ch.messages.push({ author: currentUser, text });
-  saveChannels();
-  renderMessages();
+  if (ch.locked && !currentUser.isAdmin) {
+    alert("This channel is locked!");
+    return;
+  }
+
+  ch.messages.push({ author: currentUser.username, text });
   messageInput.value = "";
+  saveData();
+  renderMessages();
 }
 
-// Handle Enter key
 messageInput.addEventListener("keypress", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -99,22 +220,21 @@ messageInput.addEventListener("keypress", (e) => {
   }
 });
 
-// Add new channel
-document.getElementById("newChannelBtn").addEventListener("click", () => {
-  const name = prompt("Enter new channel name:");
+addChannelBtn.onclick = () => {
+  if (!currentUser.isAdmin) return alert("Only admin can add channels.");
+  const name = prompt("New channel name:");
   if (!name) return;
-  channels.push({ id: Date.now(), name, messages: [] });
-  saveChannels();
+  channels.push({ id: Date.now(), name, locked: false, messages: [] });
+  saveData();
   renderChannels();
-});
+};
 
-// Logout button (just clears username)
-document.getElementById("logoutBtn").addEventListener("click", () => {
-  localStorage.removeItem("username");
-  alert("You have been logged out.");
-});
+logoutBtn.onclick = () => {
+  localStorage.removeItem("currentUser");
+  location.reload();
+};
 
-// Initial load
+// === Initial Load ===
 renderChannels();
 renderMessages();
 renderMembers();
