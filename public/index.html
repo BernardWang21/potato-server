@@ -2,33 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Social Chat</title>
+  <title>Potato Server 🥔</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="auth-container" class="center">
-    <h2 id="formTitle">Sign Up</h2>
-    <input id="username" placeholder="Username" />
-    <input id="password" type="password" placeholder="Password" />
-    <button id="submitBtn">Sign Up</button>
-    <div class="toggle" id="toggleMode">Already have an account? Log in</div>
-    <div id="status"></div>
+  <!-- LOGIN / SIGNUP SCREEN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-box">
+      <h1>🥔 Potato Server</h1>
+      <p id="auth-title">Welcome back</p>
+      <div id="auth-error" class="error"></div>
+
+      <input type="text" id="username" placeholder="Username" />
+      <input type="password" id="password" placeholder="Password" />
+
+      <button id="auth-button">Log In</button>
+      <p class="switch">
+        <span id="toggle-auth">Don't have an account? Sign up</span>
+      </p>
+    </div>
   </div>
 
-  <div id="chat-container" class="hidden">
-    <div id="sidebar">
-      <h3>Channels</h3>
-      <ul id="channelList"></ul>
-      <button id="addChannelBtn" class="admin-only hidden">+ Add Channel</button>
-    </div>
-    <div id="chat">
-      <div id="chatHeader">Welcome</div>
-      <div id="messages"></div>
-      <div id="messageInputContainer">
-        <input id="messageInput" placeholder="Type a message..." />
-        <button id="sendBtn">Send</button>
-      </div>
+  <!-- MAIN CHAT APP -->
+  <div id="chat-app" class="hidden">
+    <header>
+      <h2>🥔 Potato Server</h2>
+      <div id="user-info"></div>
+      <button id="logout">Logout</button>
+    </header>
+
+    <div class="layout">
+      <aside id="channels"></aside>
+      <main id="messages-area">
+        <div id="messages"></div>
+        <div id="message-input">
+          <input type="text" id="new-message" placeholder="Type a message..." />
+          <button id="send">Send</button>
+        </div>
+      </main>
+      <aside id="members"></aside>
     </div>
   </div>
 
